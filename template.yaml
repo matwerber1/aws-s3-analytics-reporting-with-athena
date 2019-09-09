@@ -61,41 +61,42 @@ Resources:
               Name: date
               Type: date
             -
-              Name: configid
+              Name: config_id
               Type: string
             -
               Name: filter
               Type: string
             -
-              Name: storageclass
+              Name: storage_class
               Type: string
             -
-              Name: objectage
+              Name: object_age
               Type: string
             -
-              Name: objectcount
+              Name: object_count
               Type: bigint
             -
-              Name: datauploaded_mb
+              Name: uploaded_mb
               Type: decimal(12,4)
             -
               Name: storage_mb
               Type: decimal(12,4)
             -
-              Name: dataretrieved_mb
+              Name: retrieved_mb
               Type: decimal(12,4)
             -
-              Name: getrequestcount
+              Name: get_request_count
               Type: decimal(12,4)
             -
-              Name: cumulativeaccessratio
+              Name: cumulative_access_ratio
               Type: decimal(12,4)
             -
-              Name: objectageforsiatransition
+              Name: age_for_sia_transition
               Type: string
             -
-              Name: recommendedobjectageforsiatransition
+              Name: recommended_age_for_sia_transition
               Type: string
+
           Compressed: False
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
