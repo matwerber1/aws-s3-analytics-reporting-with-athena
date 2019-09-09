@@ -59,7 +59,7 @@ Resources:
           Columns: 
             -
               Name: date
-              Type: string
+              Type: date
             -
               Name: configid
               Type: string
@@ -74,22 +74,22 @@ Resources:
               Type: string
             -
               Name: objectcount
-              Type: string
+              Type: bigint
             -
               Name: datauploaded_mb
-              Type: string
+              Type: decimal(12,4)
             -
               Name: storage_mb
-              Type: string
+              Type: decimal(12,4)
             -
               Name: dataretrieved_mb
-              Type: string
+              Type: decimal(12,4)
             -
               Name: getrequestcount
-              Type: string
+              Type: decimal(12,4)
             -
               Name: cumulativeaccessratio
-              Type: string
+              Type: decimal(12,4)
             -
               Name: objectageforsiatransition
               Type: string
