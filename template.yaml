@@ -1,0 +1,347 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters: 
+  DatabaseName: 
+    Type: String
+    Default: s3_analytics_db
+    Description: Name of catalog database to contain S3 analytics reports
+  AnalyticsBucket: 
+    Type: String
+    Default: YOUR_ANALYSIS_BUCKET
+    Description: Bucket which contains your S3 Analytics report(s)
+
+  AnalyticsKeyPrefix:
+    Type: String
+    Description: the key prefix, if any, of the analytics reports delivered in your analytics S3 bucket. This *should* include a trailing slash
+    Default: YOUR_ANALYSIS_KEY_PREFIX
+
+Resources: 
+  #-----------------------------------------------------------------------------
+  # AWS GLUE
+  #-----------------------------------------------------------------------------
+  S3AnalyticsDatabase:
+    Type: AWS::Glue::Database
+    Properties: 
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref DatabaseName
+        Description: Contains S3 Analytics reports for buckets on which analytics has been enabled. 
+        LocationUri: 
+          !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+
+  S3AnalyticsTable:
+    Type: AWS::Glue::Table
+    Properties: 
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref S3AnalyticsDatabase
+      TableInput: 
+        Name: !Ref AnalyticsKeyPrefix
+        Description: Contains S3 Analytics reports for buckets on which analytics has been enabled. 
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          CrawlerSchemaDeserializerVersion: "1.0"
+          CrawlerSchemaSerializerVersion: "1.0"
+          areColumnsQuoted: "false"
+          EXTERNAL: "TRUE"
+          classification: "csv"
+          columnsOrdered: "true"
+          compressionType: "none"
+          delimiter: ","
+          skip.header.line.count: "1"
+          typeOfData: "file"
+        PartitionKeys: 
+          - 
+            Comment: S3 bucket from which a given report was derived.
+            Name: bucket
+            Type: string
+        StorageDescriptor: 
+          Location: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+          Columns: 
+            -
+              Name: date
+              Type: string
+            -
+              Name: configid
+              Type: string
+            -
+              Name: filter
+              Type: string
+            -
+              Name: storageclass
+              Type: string
+            -
+              Name: objectage
+              Type: string
+            -
+              Name: objectcount
+              Type: bigint
+            -
+              Name: datauploaded_mb
+              Type: double
+            -
+              Name: storage_mb
+              Type: double
+            -
+              Name: dataretrieved_mb
+              Type: double
+            -
+              Name: getrequestcount
+              Type: bigint
+            -
+              Name: cumulativeaccessratio
+              Type: double
+            -
+              Name: objectageforsiatransition
+              Type: int
+            -
+              Name: recommendedobjectageforsiatransition
+              Type: int
+          Compressed: False
+          InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
+          OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          NumberOfBuckets: -1
+          BucketColumns: []
+          SortColumns: []
+          Parameters: {}
+          SerdeInfo: 
+            SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+            Parameters:
+              "field.delim": ","
+              "serialization.format": ","
+
+  Crawler:
+    Type: 'AWS::Glue::Crawler'
+    DependsOn:
+      - S3AnalyticsDatabase
+      - CrawlerRole
+    Properties:
+      Name: s3-analytics-crawler
+      Description: A recurring crawler that keeps your S3 analytics table in Athena up-to-date.
+      Role: !GetAtt CrawlerRole.Arn
+      DatabaseName: !Ref S3AnalyticsDatabase
+      Targets:
+        S3Targets:
+          - Path: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+      SchemaChangePolicy:
+        UpdateBehavior: LOG # Glue crawler identifies slightly wrong schema, so we need to prevent overrwrites: 
+        DeleteBehavior: DELETE_FROM_DATABASE
+
+  CrawlerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Policies:
+        - PolicyName: CrawlerComponentRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'glue:UpdateDatabase'
+                  - 'glue:UpdatePartition'
+                  - 'glue:CreateTable'
+                  - 'glue:UpdateTable'
+                  - 'glue:ImportCatalogToGlue'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource: !Sub "arn:aws:s3:::${AnalyticsBucket}/${AnalyticsKeyPrefix}/*"
+
+  #-----------------------------------------------------------------------------
+  # LAMBDA TO TRIGGER CRAWLER
+  #-----------------------------------------------------------------------------
+  # This function is bothed used as a custom CF resource so we can initially
+  # crawl our tables right after launching our stack, as well as being the target
+  # of an S3 Event that triggers when new analytics reports are delivered. 
+  RunCrawlerFunction:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: Crawler
+    Properties:
+      Code:
+        ZipFile: >
+          const AWS = require('aws-sdk');
+          const response = require('cfn-response');
+          exports.handler = function(event, context) {
+            if (event.RequestType === 'Delete') {
+              response.send(event, context, response.SUCCESS);
+            } else {
+              const glue = new AWS.Glue();
+              glue.startCrawler({ Name: 's3-analytics-crawler' }, function(err, data) {
+                if (err) {
+                  const responseData = { msg: this.httpResponse.body.toString() };
+                  response.send(event, context, response.FAILED, responseData);
+                }
+                else {
+                  response.send(event, context, response.SUCCESS);
+                }
+              });
+            }
+          };
+      Handler: 'index.handler'
+      Timeout: 30
+      Runtime: nodejs8.10
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt RunCrawlerFunctionRole.Arn
+
+  RunCrawlerFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: CrawlerFunctionRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'glue:StartCrawler'
+                Resource: '*'
+
+  #-----------------------------------------------------------------------------
+  # S3 EVENT TO TRIGGER LAMBDA THAT TRIGGERS CRAWLER
+  #-----------------------------------------------------------------------------
+  
+  # Grant S3 Events permission to invoke our Lambda
+  S3EventLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt RunCrawlerFunction.Arn
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:aws:s3:::${AnalyticsBucket}'
+
+  # You can only use native CloudFormation to create S3 Events if you are also
+  # creating the source bucket in the same template. Since we are assuming that
+  # the bucket to which our analytics reports are being delivered *already*
+  # exists, we must instead make a PutBucketNotification() API call to create
+  # the S3 Event. We do this with a custom CloudFormation resource & Lambda: 
+  S3EventNotificationConfiguration:
+    Type: 'Custom::AWSPutS3Notification'
+    Properties:
+      ServiceToken: !GetAtt S3EventNotificationProvider.Arn
+      TargetLambdaArn: !GetAtt RunCrawlerFunction.Arn
+      BucketName: !Ref AnalyticsBucket
+      ReportKey: !Sub "${AnalyticsKeyPrefix}/"
+  
+  S3EventNotificationProvider:
+    Type: 'AWS::Lambda::Function'
+    DependsOn:
+    - RunCrawlerFunction
+    - S3EventNotificationProviderRole
+    - S3EventLambdaPermission
+    Properties:
+      Code:
+        ZipFile: >
+          const AWS = require('aws-sdk');
+          const response = require('cfn-response');
+          exports.handler = function(event, context, callback) {
+            console.log('Received event:\n' + JSON.stringify(event,null,2))
+            const s3 = new AWS.S3();
+            const putConfigRequest = function(notificationConfiguration) {
+              return new Promise(function(resolve, reject) {
+                s3.putBucketNotificationConfiguration({
+                  Bucket: event.ResourceProperties.BucketName,
+                  NotificationConfiguration: notificationConfiguration
+                }, function(err, data) {
+                  if (err) reject({ msg: this.httpResponse.body.toString(), error: err, data: data });
+                  else resolve(data);
+                });
+              });
+            };
+            const newNotificationConfig = {};
+            if (event.RequestType !== 'Delete') {
+              newNotificationConfig.LambdaFunctionConfigurations = [{
+                Events: [ 's3:ObjectCreated:*' ],
+                LambdaFunctionArn: event.ResourceProperties.TargetLambdaArn || 'missing arn',
+                Filter: { Key: { FilterRules: [ { Name: 'prefix', Value: event.ResourceProperties.ReportKey } ] } }
+              }];
+            }
+            putConfigRequest(newNotificationConfig).then(function(result) {
+              response.send(event, context, response.SUCCESS, result);
+              callback(null, result);
+            }).catch(function(error) {
+              response.send(event, context, response.FAILED, error);
+              console.log(error);
+              callback(error);
+            });
+          };
+      Handler: 'index.handler'
+      Timeout: 30
+      Runtime: nodejs8.10
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt S3EventNotificationProviderRole.Arn
+
+  S3EventNotificationProviderRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: PutS3EventNotification
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 's3:PutBucketNotification'
+                Resource: !Sub 'arn:aws:s3:::${AnalyticsBucket}'
+
+  #-----------------------------------------------------------------------------
+  # CUSTOM RESOURCE TO TRIGGER CRAWLER WHEN CLOUDFORMATION STACK FIRST LAUNCHES
+  #-----------------------------------------------------------------------------
+  # This custom resource simply triggers our crawler after its first created
+  # so we can populate our table without needing to wait for a new analytics
+  # report to get delivered and trigger an S3 Event -> Lambda. 
+  StartAnalyticsCrawlerResource:
+    Type: 'Custom::StartAnalyticsCrawler'
+    Properties:
+      ServiceToken: !GetAtt RunCrawlerFunction.Arn
