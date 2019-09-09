@@ -39,6 +39,12 @@ Once the catalog table is populated, you may then query the table using Amazon R
 
   3. When specifiying the prefix values above, be sure to only use **lowercase** characters.
 
+# Fast Setup of S3 Analytics Prerequisite
+
+Per above, you need one or more S3 buckets configured to deliver S3 Analytics reports with properly-formatted prefix. You may optionally use my other project below to quickly enable S3 Analytics for all of your buckets with Athena-friendly prefixes:
+
+https://github.com/matwerber1/aws-s3-enable-analytics-all-buckets
+
 # Deployment
 
 1. Open `template.yaml` and edit the following values as needed:
