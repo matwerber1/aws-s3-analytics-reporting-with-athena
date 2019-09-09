@@ -10,12 +10,12 @@ echo 'Creating CloudFormation package...'
 aws cloudformation package \
   --template-file template.yaml \
   --s3-bucket $DEPLOY_BUCKET \
-  --output-template-file package.json
+  --output-template-file packaged-template
 
 # Deploy our changes
 echo 'Deploying CloudFormation package...'
 aws cloudformation deploy \
-  --template-file package.json \
+  --template-file packaged-template.json \
   --stack-name $STACK \
   --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --parameter-overrides AnalyticsBucket="$ANALYTICS_BUCKET" AnalyticsKeyPrefix="$ANALYTICS_KEY_PREFIX"
