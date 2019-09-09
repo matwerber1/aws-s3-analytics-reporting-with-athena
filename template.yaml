@@ -74,28 +74,28 @@ Resources:
               Type: string
             -
               Name: objectcount
-              Type: bigint
+              Type: string
             -
               Name: datauploaded_mb
-              Type: double
+              Type: string
             -
               Name: storage_mb
-              Type: double
+              Type: string
             -
               Name: dataretrieved_mb
-              Type: double
+              Type: string
             -
               Name: getrequestcount
-              Type: bigint
+              Type: string
             -
               Name: cumulativeaccessratio
-              Type: double
+              Type: string
             -
               Name: objectageforsiatransition
-              Type: int
+              Type: string
             -
               Name: recommendedobjectageforsiatransition
-              Type: int
+              Type: string
           Compressed: False
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
