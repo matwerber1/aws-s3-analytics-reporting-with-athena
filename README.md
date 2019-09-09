@@ -14,6 +14,8 @@ This project creates an AWS Glue database and table in the Glue catalog and then
 
 Once the catalog table is populated, you may then query the table using Amazon Redshift Spectrum, Amazon QuickSight, Amazon Athena, or Amazon EMR.
 
+Note that the out-of-the-box Glue Crawler detected incorrect column data types for some of my analytics report partitions because certain rows were empty (I don't have tons of data :/). Therefore, I hard-coded a working schema as a Glue::Table in CloudFormation and disabled the crawler's ability to modify the table schema; it should only add/remove partitions at this point. If columns look odd, its possible I made a mistake in the hard-coded data types - let me know if you see an issue!
+
 # Pre-requisites
 
 1. You have enabled S3 Analytics on one or more existing source buckets
