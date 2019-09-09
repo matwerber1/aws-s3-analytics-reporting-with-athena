@@ -8,14 +8,6 @@ This is great for one-off bucket analysis, but what if you want reporting in agg
 
 This project let's you do just that!
 
-# Errors from E Notation
-
-It turns out, the raw CSV reports delivered by S3 Analytics use E notation instead of decimal notation for very small numbers. 
-
-For example, `0.0004` is shown as `4.0E-1` in the CSV report. This is breaking our ability to run queries in Athena, since our table definition expects `decimal` data types but (some) partitions might contain `string`. 
-
-Trying to figure out how to fix this...
-
 # Architecture
 
 This project creates an AWS Glue database and table in the Glue catalog and then creates and runs a crawler that populates the table with new partitions each time an analytics report is delivered. 
