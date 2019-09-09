@@ -34,6 +34,9 @@ Once the catalog table is populated, you may then query the table using Amazon R
 
   * `bucket_abc_analytics-config.csv` is the object that the S3 Analytics service will deliver for you. You don't need to create this file or worry about its name. 
 
+  Here's an example: 
+  ![alt](./images/analytics_config.png)
+
   3. When specifiying the prefix values above, be sure to only use **lowercase** characters.
 
 # Deployment
@@ -63,9 +66,14 @@ Once the catalog table is populated, you may then query the table using Amazon R
   ```SQL
   show partitions s3_analytics;
   ``` 
+  ![alt](./images/show_partitions.png)
 
 4. If at least one partition was present, run the following command to view a sample of results: 
 
   ```SQL
-  select * from s3_analytics limit 50;
+  select * from s3_analytics 
+  where objectcount is not null 
+  limit 50;
   ```
+
+  ![alt](./images/results.png)
