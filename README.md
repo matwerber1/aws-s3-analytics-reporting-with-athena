@@ -1,6 +1,6 @@
 # Amazon S3 Analytics Reporting With Amazon Athena
 
-If you enable [S3 Analytics](https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html) on a given Amazon S3 bucket, then the S3 service will show you an analysis including but not limited to object counts and data retrieval by storage class, object age, etc. 
+If you enable [S3 Analytics](https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html) on a given Amazon S3 bucket, then the S3 service will show you an analysis including but not limited to object counts and data retrieval by storage class, object age, etc. See this link for details: https://docs.aws.amazon.com/AmazonS3/latest/dev/analytics-storage-class.html
 
 You can view this analysis in the S3 web console and optionally choose to deliver the analysis as a CSV file to an S3 bucket and prefix of your choosing. 
 
