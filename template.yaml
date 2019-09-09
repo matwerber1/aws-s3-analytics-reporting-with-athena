@@ -119,11 +119,26 @@ Resources:
       Description: A recurring crawler that keeps your S3 analytics table in Athena up-to-date.
       Role: !GetAtt CrawlerRole.Arn
       DatabaseName: !Ref S3AnalyticsDatabase
+      # Config below is key; without it, Glue may write partitions with a schema that conflicts with the table, leading to query errors in Athena
+      Configuration:  
+        !Sub | 
+          {
+            "Version": 1.0, 
+            "CrawlerOutput": {
+              "Partitions": {
+                "AddOrUpdateBehavior": "InheritFromTable" 
+              }
+            }
+          }
+          Version: 1.0
+          CrawlerOutput:
+            Partitions:
+              AddOrUpdateBehavior: "InheritFromTable"
       Targets:
         S3Targets:
           - Path: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
       SchemaChangePolicy:
-        UpdateBehavior: LOG # Glue crawler identifies slightly wrong schema, so we need to prevent overrwrites: 
+        UpdateBehavior: LOG                       # Glue crawlers try their best, but get it wrong depending on the content of certain files; don't let them update our table
         DeleteBehavior: DELETE_FROM_DATABASE
 
   CrawlerRole:
