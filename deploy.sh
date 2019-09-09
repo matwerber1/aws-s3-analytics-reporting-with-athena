@@ -10,7 +10,7 @@ echo 'Creating CloudFormation package...'
 aws cloudformation package \
   --template-file template.yaml \
   --s3-bucket $DEPLOY_BUCKET \
-  --output-template-file packaged-template
+  --output-template-file packaged-template.json
 
 # Deploy our changes
 echo 'Deploying CloudFormation package...'
