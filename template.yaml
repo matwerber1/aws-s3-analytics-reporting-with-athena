@@ -1,23 +1,83 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template deploys an AWS Glue catalog database and table for S3 analytics 
+  reports, a Glue crawler to catalog your reports as partitions in the table,
+  and an S3 event to trigger the crawler when new reports are delivered. 
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Glue Catalog Configuration"
+        Parameters: 
+          - DatabaseName
+          - TableName
+          - CrawlerName
+      - 
+        Label: 
+          default: "S3 Analytics Configuration"
+        Parameters: 
+          - AnalyticsBucket
+          - AnalyticsKeyPrefix
+    ParameterLabels: 
+      DatabaseName: 
+        default: "Analytics database name?"
+      TableName: 
+        default: "Analytics table name?"
+      AnalyticsBucket: 
+        default: "S3 bucket to which your reports are delivered?"
+      AnalyticsKeyPrefix: 
+        default: "Optional key prefix (if any) specified in your analytics destination?"
 
 Parameters: 
+
   DatabaseName: 
     Type: String
     Default: s3_analytics_db
-    Description: Name of catalog database to contain S3 analytics reports
+    Description: >
+      Name of the AWS Glue catalog database to contain your S3 analytics table
+
+  TableName: 
+    Type: String
+    Default: s3_analytics
+    Description: >
+      Name of the AWS Glue catalog table to contain your S3 analytics data. This
+      *must* be identical to the lowest-level folder in your analytics report
+      destination prefix before the "bucket=" portion. For example, if you specified
+      a prefix of "reports/s3_analytics/bucket=SOURCE_BUCKET", then this parameter
+      should be "s3_analytics". If you only specified "s3_analytics/bucket-SOURCE_BUCKET",
+      this parameter would still just be "s3_analytics".
+
+  CrawlerName: 
+    Type: String
+    Default: s3-analytics-crawler
+    Description: >
+      Name of the AWS Glue crawler that will add our S3 analytics reports to
+      our report table in the Glue catalog. 
+
   AnalyticsBucket: 
     Type: String
     Default: YOUR_ANALYSIS_BUCKET
-    Description: Bucket which contains your S3 Analytics report(s)
+    Description: >
+      S3 bucket to which all of your S3 analytics reports are being delivered
 
   AnalyticsKeyPrefix:
     Type: String
-    Description: the key prefix, if any, of the analytics reports delivered in your analytics S3 bucket. This *should* include a trailing slash
+    Description: > 
+      The delivery prefix in your S3 analytics configuration, excluding the 
+      "/bucket=source_bucket" portion. In other words, if your delivery prefix is
+      "s3_analytics/bucket=my_bucket", then this parameter value should be "s3_analytics".
+      If you use nested multiple folders in your prefix, those should be included too.
+      For example, if your prefix was "reports/s3_analytics/bucket=my_bucket", then
+      this parameter value should be "reports/s3_analytics". Do not include a trailing
+      slash.
+
     Default: YOUR_ANALYSIS_KEY_PREFIX
 
 Resources: 
   #-----------------------------------------------------------------------------
-  # AWS GLUE
+  # AWS Glue Resources
   #-----------------------------------------------------------------------------
   S3AnalyticsDatabase:
     Type: AWS::Glue::Database
@@ -26,16 +86,15 @@ Resources:
       DatabaseInput:
         Name: !Ref DatabaseName
         Description: Contains S3 Analytics reports for buckets on which analytics has been enabled. 
-        LocationUri: 
-          !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
-
+        LocationUri: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+            
   S3AnalyticsTable:
     Type: AWS::Glue::Table
     Properties: 
       CatalogId: !Ref AWS::AccountId
       DatabaseName: !Ref S3AnalyticsDatabase
       TableInput: 
-        Name: !Ref AnalyticsKeyPrefix
+        Name: !Ref TableName
         Description: Contains S3 Analytics reports for buckets on which analytics has been enabled. 
         TableType: EXTERNAL_TABLE
         Parameters:
@@ -56,6 +115,10 @@ Resources:
             Type: string
         StorageDescriptor: 
           Location: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+          # Although Glue crawlers make a best effort to detect proper schema, 
+          # anecdotal testing shows that the crawlers may pick up the wrong schema 
+          # for some S3 analytics reports, depending on their content. Therefore, 
+          # we must explicitly define our schema below:  
           Columns: 
             -
               Name: date
@@ -96,7 +159,6 @@ Resources:
             -
               Name: recommended_age_for_sia_transition
               Type: string
-
           Compressed: False
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
@@ -116,11 +178,16 @@ Resources:
       - S3AnalyticsDatabase
       - CrawlerRole
     Properties:
-      Name: s3-analytics-crawler
-      Description: A recurring crawler that keeps your S3 analytics table in Athena up-to-date.
+      Name: !Ref CrawlerName
+      Description: A crawler that keeps your S3 analytics table in Athena up-to-date.
       Role: !GetAtt CrawlerRole.Arn
       DatabaseName: !Ref S3AnalyticsDatabase
-      # Config below is key; without it, Glue may write partitions with a schema that conflicts with the table, leading to query errors in Athena
+      # The configuration below is important, as it prevents the crawler from
+      # modifying the schema we defined for our table, above. We do this because
+      # testing shows that the Glue crawlers may detect the wrong schema for certain
+      # reports, depending on their content. If there's a mismatch in schemas
+      # between partitions, or if partition schemas don't match table schema, we
+      # will receive an error when we later try to use Athena to query our table. 
       Configuration:  
         !Sub | 
           {
@@ -139,7 +206,9 @@ Resources:
         S3Targets:
           - Path: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
       SchemaChangePolicy:
-        UpdateBehavior: LOG                       # Glue crawlers try their best, but get it wrong depending on the content of certain files; don't let them update our table
+        # For same reasons described above, we do not want the crawler to change
+        # our defined table schema, so we set the UpdateBehavior to LOG
+        UpdateBehavior: LOG
         DeleteBehavior: DELETE_FROM_DATABASE
 
   CrawlerRole:
@@ -180,18 +249,25 @@ Resources:
                 Action:
                   - 's3:GetObject'
                   - 's3:PutObject'
-                Resource: !Sub "arn:aws:s3:::${AnalyticsBucket}/${AnalyticsKeyPrefix}/*"
+                Resource: 
+                  !Sub "arn:aws:s3:::${AnalyticsBucket}/${AnalyticsKeyPrefix}/*"
 
   #-----------------------------------------------------------------------------
   # LAMBDA TO TRIGGER CRAWLER
   #-----------------------------------------------------------------------------
-  # This function is bothed used as a custom CF resource so we can initially
-  # crawl our tables right after launching our stack, as well as being the target
-  # of an S3 Event that triggers when new analytics reports are delivered. 
+
+  # This function triggers our Glue crawler and is used at two different times. 
+  # First, it backs the custom CloudFormation resource StartAnalyticsCrawlerResource, 
+  # which starts the crawler when our stack first deploys so we populate our table
+  # with any existing reports right away. Second, it is invoked by an S3 Event 
+  # any time a new S3 analytics report is delivered to our reporting bucket.
   RunCrawlerFunction:
     Type: 'AWS::Lambda::Function'
     DependsOn: Crawler
     Properties:
+      Environment: 
+        Variables: 
+          CRAWLER_NAME: !Ref CrawlerName
       Code:
         ZipFile: >
           const AWS = require('aws-sdk');
@@ -201,7 +277,7 @@ Resources:
               response.send(event, context, response.SUCCESS);
             } else {
               const glue = new AWS.Glue();
-              glue.startCrawler({ Name: 's3-analytics-crawler' }, function(err, data) {
+              glue.startCrawler({ Name: process.env['CRAWLER_NAME'] }, function(err, data) {
                 if (err) {
                   const responseData = { msg: this.httpResponse.body.toString() };
                   response.send(event, context, response.FAILED, responseData);
@@ -245,7 +321,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'glue:StartCrawler'
-                Resource: '*'
+                Resource: 
+                  !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlerName}"
 
   #-----------------------------------------------------------------------------
   # S3 EVENT TO TRIGGER LAMBDA THAT TRIGGERS CRAWLER
