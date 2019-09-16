@@ -19,5 +19,3 @@ aws cloudformation deploy \
   --stack-name $STACK \
   --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --parameter-overrides AnalyticsBucket="$ANALYTICS_BUCKET" AnalyticsKeyPrefix="$ANALYTICS_KEY_PREFIX"
-
-  aws s3 cp template.yaml
