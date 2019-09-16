@@ -18,17 +18,17 @@ Metadata:
         Label: 
           default: "S3 Analytics Configuration"
         Parameters: 
-          - AnalyticsBucket
-          - AnalyticsKeyPrefix
+          - ReportDeliveryBucket
+          - ReportDeliveryKeyPrefix
     ParameterLabels: 
       DatabaseName: 
         default: "Analytics database name?"
       TableName: 
         default: "Analytics table name?"
-      AnalyticsBucket: 
+      ReportDeliveryBucket: 
         default: "S3 bucket to which your reports are delivered?"
-      AnalyticsKeyPrefix: 
-        default: "Optional key prefix (if any) specified in your analytics destination?"
+      ReportDeliveryKeyPrefix: 
+        default: "S3 key prefix for your analytics reports?"
 
 Parameters: 
 
@@ -56,13 +56,13 @@ Parameters:
       Name of the AWS Glue crawler that will add our S3 analytics reports to
       our report table in the Glue catalog. 
 
-  AnalyticsBucket: 
+  ReportDeliveryBucket: 
     Type: String
-    Default: YOUR_ANALYSIS_BUCKET
+    Default: YOUR_REPORT_BUCKET
     Description: >
       S3 bucket to which all of your S3 analytics reports are being delivered
 
-  AnalyticsKeyPrefix:
+  ReportDeliveryKeyPrefix:
     Type: String
     Description: > 
       The delivery prefix in your S3 analytics configuration, excluding the 
@@ -73,7 +73,7 @@ Parameters:
       this parameter value should be "reports/s3_analytics". Do not include a trailing
       slash.
 
-    Default: YOUR_ANALYSIS_KEY_PREFIX
+    Default: s3_analytics
 
 Resources: 
   #-----------------------------------------------------------------------------
@@ -86,7 +86,7 @@ Resources:
       DatabaseInput:
         Name: !Ref DatabaseName
         Description: Contains S3 Analytics reports for buckets on which analytics has been enabled. 
-        LocationUri: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+        LocationUri: !Sub "s3://${ReportDeliveryBucket}/${ReportDeliveryKeyPrefix}/"
             
   S3AnalyticsTable:
     Type: AWS::Glue::Table
@@ -114,7 +114,7 @@ Resources:
             Name: bucket
             Type: string
         StorageDescriptor: 
-          Location: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+          Location: !Sub "s3://${ReportDeliveryBucket}/${ReportDeliveryKeyPrefix}/"
           # Although Glue crawlers make a best effort to detect proper schema, 
           # anecdotal testing shows that the crawlers may pick up the wrong schema 
           # for some S3 analytics reports, depending on their content. Therefore, 
@@ -204,7 +204,7 @@ Resources:
               AddOrUpdateBehavior: "InheritFromTable"
       Targets:
         S3Targets:
-          - Path: !Sub "s3://${AnalyticsBucket}/${AnalyticsKeyPrefix}/"
+          - Path: !Sub "s3://${ReportDeliveryBucket}/${ReportDeliveryKeyPrefix}/"
       SchemaChangePolicy:
         # For same reasons described above, we do not want the crawler to change
         # our defined table schema, so we set the UpdateBehavior to LOG
@@ -250,7 +250,7 @@ Resources:
                   - 's3:GetObject'
                   - 's3:PutObject'
                 Resource: 
-                  !Sub "arn:aws:s3:::${AnalyticsBucket}/${AnalyticsKeyPrefix}/*"
+                  !Sub "arn:aws:s3:::${ReportDeliveryBucket}/${ReportDeliveryKeyPrefix}/*"
 
   #-----------------------------------------------------------------------------
   # LAMBDA TO TRIGGER CRAWLER
@@ -336,7 +336,7 @@ Resources:
       FunctionName: !GetAtt RunCrawlerFunction.Arn
       Principal: 's3.amazonaws.com'
       SourceAccount: !Ref AWS::AccountId
-      SourceArn: !Sub 'arn:aws:s3:::${AnalyticsBucket}'
+      SourceArn: !Sub 'arn:aws:s3:::${ReportDeliveryBucket}'
 
   # You can only use native CloudFormation to create S3 Events if you are also
   # creating the source bucket in the same template. Since we are assuming that
@@ -348,8 +348,8 @@ Resources:
     Properties:
       ServiceToken: !GetAtt S3EventNotificationProvider.Arn
       TargetLambdaArn: !GetAtt RunCrawlerFunction.Arn
-      BucketName: !Ref AnalyticsBucket
-      ReportKey: !Sub "${AnalyticsKeyPrefix}/"
+      BucketName: !Ref ReportDeliveryBucket
+      ReportKey: !Sub "${ReportDeliveryKeyPrefix}/"
   
   S3EventNotificationProvider:
     Type: 'AWS::Lambda::Function'
@@ -426,7 +426,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - 's3:PutBucketNotification'
-                Resource: !Sub 'arn:aws:s3:::${AnalyticsBucket}'
+                Resource: !Sub 'arn:aws:s3:::${ReportDeliveryBucket}'
 
   #-----------------------------------------------------------------------------
   # CUSTOM RESOURCE TO TRIGGER CRAWLER WHEN CLOUDFORMATION STACK FIRST LAUNCHES
