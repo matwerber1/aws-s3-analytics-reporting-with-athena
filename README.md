@@ -47,7 +47,19 @@ Per above, you need one or more S3 buckets configured to deliver S3 Analytics re
 
 https://github.com/matwerber1/aws-s3-enable-analytics-all-buckets
 
-# Deployment
+# S3 Analytics Region - Reminder!
+
+Note - When configuring S3 analytics reports to be sent to a destination reporting bucket, the reporting bucket and destination bucket **must** be in the same region for the export to work. 
+
+If you want to aggregate S3 Analytics reports across multiple regions, you would need to first deliver reports to a bucket in their local region and then build a process to copy the reports cross-region to a central reporting bucket / prefix. Or, you could launch this stack in multiple regions. 
+
+# Deployment - Easy Button
+
+* us-east-1 (Virginia) <a href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/new?stackName=s3-analytics-athena&templateURL=https://s3.amazonaws.com/matwerber.info/cloudformation-templates/s3-analytics-with-athena.yaml">
+  <img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png"/>
+  </a>
+
+# Deployment - Shell script
 
 1. Open `template.yaml` and edit the following values as needed:
 
