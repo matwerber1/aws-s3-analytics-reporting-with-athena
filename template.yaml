@@ -81,6 +81,11 @@ Resources:
   #-----------------------------------------------------------------------------
   # AWS Glue Resources
   #-----------------------------------------------------------------------------
+
+  # Note - if your stack fails to create with an "Insufficient Lake Formation Permissions: Required Create Database on Catalog",
+  # this means that the IAM user or role you're using to launch this template needs to first be granted "Create Database" permissions
+  # in Lake Formation before you can run this template. Refer to docs for detai:
+  # https://docs.aws.amazon.com/lake-formation/latest/dg/upgrade-glue-lake-formation.html
   S3AnalyticsDatabase:
     Type: AWS::Glue::Database
     Properties: 
@@ -253,6 +258,23 @@ Resources:
                   - 's3:PutObject'
                 Resource: 
                   !Sub "arn:aws:s3:::${ReportDeliveryBucket}/${ReportDeliveryKeyPrefix}/*"
+  #-----------------------------------------------------------------------------
+  # AWS Lake Formation
+  #-----------------------------------------------------------------------------
+  # Depending on whether and how you are using Lake Formation, you may need to
+  # explicitly grant your crawler permission to update the Lake Formation catalog. 
+  DataLakePermission: 
+    Type: AWS::LakeFormation::Permissions
+    Properties: 
+      DataLakePrincipal: 
+        DataLakePrincipalIdentifier: !GetAtt CrawlerRole.Arn
+      Permissions: 
+        - ALL
+      Resource: 
+        TableResource: 
+          DatabaseName: !Ref S3AnalyticsDatabase
+          Name: !Ref S3AnalyticsTable
+
 
   #-----------------------------------------------------------------------------
   # LAMBDA TO TRIGGER CRAWLER
