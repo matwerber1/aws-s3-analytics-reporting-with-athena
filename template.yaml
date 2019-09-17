@@ -47,7 +47,8 @@ Parameters:
       destination prefix before the "bucket=" portion. For example, if you specified
       a prefix of "reports/s3_analytics/bucket=SOURCE_BUCKET", then this parameter
       should be "s3_analytics". If you only specified "s3_analytics/bucket-SOURCE_BUCKET",
-      this parameter would still just be "s3_analytics".
+      this parameter would still just be "s3_analytics". Note that this value MUST MATCH
+      the lowest-level path in the S3 key prefix specified in the S3 Analytics Configuration below. 
 
   CrawlerName: 
     Type: String
@@ -60,7 +61,8 @@ Parameters:
     Type: String
     Default: YOUR_REPORT_BUCKET
     Description: >
-      S3 bucket to which all of your S3 analytics reports are being delivered
+      S3 bucket to which all of your S3 analytics reports are being delivered. 
+      this bucket must be in the same region as this CloudFormation stack!
 
   ReportDeliveryKeyPrefix:
     Type: String
@@ -71,7 +73,7 @@ Parameters:
       If you use nested multiple folders in your prefix, those should be included too.
       For example, if your prefix was "reports/s3_analytics/bucket=my_bucket", then
       this parameter value should be "reports/s3_analytics". Do not include a trailing
-      slash.
+      slash. Note that the lowest-level directory in this path MUST MATCH the Glue table name. 
 
     Default: s3_analytics
 
